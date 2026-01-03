@@ -170,19 +170,57 @@ def save_places_to_csv(places: List[Place], output_path: str = "result.csv", app
     else:
         logging.warning("No data to save. DataFrame is empty.")
 
+def deduplicate_places(places):
+    seen = set()
+    unique = []
+
+    for p in places:
+        key = (p.name.lower().strip(), p.address.lower().strip())
+        if key not in seen:
+            seen.add(key)
+            unique.append(p)
+
+    return unique
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--search", type=str, help="Search query for Google Maps")
+    parser.add_argument(
+        "-s", "--search", nargs="+", help="Search queries for Google Maps"
+    )
     parser.add_argument("-t", "--total", type=int, help="Total number of results to scrape")
     parser.add_argument("-o", "--output", type=str, default="result.csv", help="Output CSV file path")
     parser.add_argument("--append", action="store_true", help="Append results to the output file instead of overwriting")
+
     args = parser.parse_args()
-    search_for = args.search or "turkish stores in toronto Canada"
-    total = args.total or 1
+
+    search_terms = args.search or ["tempat makan perlis"]
+    target_total = args.total or 20
     output_path = args.output
-    append = args.append
-    places = scrape_places(search_for, total)
-    save_places_to_csv(places, output_path, append=append)
+
+    all_places = []
+
+    for idx, term in enumerate(search_terms):
+        remaining = target_total - len(all_places)
+        if remaining <= 0:
+            break
+
+        logging.info(f"Searching ({idx+1}/{len(search_terms)}): {term}")
+        results = scrape_places(term, remaining)
+        all_places.extend(results)
+
+        all_places = deduplicate_places(all_places)
+
+        logging.info(
+            f"Collected {len(all_places)} / {target_total} places so far"
+        )
+
+    if not all_places:
+        logging.warning("No places collected from any search term.")
+        return
+
+    save_places_to_csv(all_places, output_path, append=False)
+
 
 if __name__ == "__main__":
     main()
